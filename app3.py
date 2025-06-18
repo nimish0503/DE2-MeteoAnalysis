@@ -1,8 +1,10 @@
 import streamlit as st
 import pandas as pd
 import io
+import os
+from google.oauth2 import service_account
 
-# --- Import Handling (ONLY CHANGE MADE) ---
+# --- Import Handling ---
 try:
     import matplotlib.pyplot as plt
     from google.cloud import storage
@@ -10,23 +12,35 @@ except ImportError as e:
     st.error(f"Critical dependency error: {str(e)}")
     st.stop()  # Halt if imports fail
 
-# --- REST IS IDENTICAL TO YOUR ORIGINAL CODE ---
+# --- App Configuration ---
 st.set_page_config(page_title="🌦️ Weather Data Dashboard", layout="wide")
 st.title("🌤️ Smart Weather Data Dashboard")
 
-# --- GCP BUCKET SETTINGS ---
+# --- GCP Bucket Settings ---
 BUCKET_NAME = "weather-data-nimish"
 BLOB_NAME = "weather_backup.csv"
 
 @st.cache_data(show_spinner=True)
 def load_gcs_csv(bucket_name, blob_name):
-    client = storage.Client()
-    bucket = client.bucket(bucket_name)
-    blob = bucket.blob(blob_name)
-    data = blob.download_as_bytes()
-    df = pd.read_csv(io.BytesIO(data))
-    return df
+    """Load CSV from GCS with explicit authentication"""
+    try:
+        # Use Streamlit secrets for authentication
+        credentials = service_account.Credentials.from_service_account_info(
+            st.secrets["gcp"]
+        )
+        client = storage.Client(
+            project=st.secrets["gcp"]["project_id"],
+            credentials=credentials
+        )
+        bucket = client.bucket(bucket_name)
+        blob = bucket.blob(blob_name)
+        data = blob.download_as_bytes()
+        return pd.read_csv(io.BytesIO(data))
+    except Exception as e:
+        st.error(f"GCS Error: {str(e)}")
+        return None
 
+# --- Data Loading UI ---
 st.sidebar.header("Load Data")
 use_gcs = st.sidebar.checkbox("Load from Google Cloud Storage", value=True)
 
@@ -35,11 +49,10 @@ if "df" not in st.session_state:
 
 if use_gcs:
     if st.sidebar.button("Load latest from GCS"):
-        try:
+        with st.spinner("Loading from GCS..."):
             st.session_state.df = load_gcs_csv(BUCKET_NAME, BLOB_NAME)
-            st.success("✅ Data loaded from GCS!")
-        except Exception as e:
-            st.error(f"Failed to load from GCS: {e}")
+            if st.session_state.df is not None:
+                st.success("✅ Data loaded from GCS!")
 else:
     uploaded_file = st.file_uploader("Upload your weather CSV", type=["csv"])
     if uploaded_file is not None:
@@ -48,6 +61,7 @@ else:
 
 df = st.session_state.df
 
+# --- Dashboard ---
 if df is not None:
     st.subheader("Raw Weather Data")
     st.dataframe(df.head(), use_container_width=True)
