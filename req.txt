@@ -31,7 +31,7 @@ jsonschema==4.24.0
 jsonschema-specifications==2025.4.1
 kiwisolver==1.4.8
 MarkupSafe==3.0.2
-matplotlib==3.10.3
+matplotlib
 narwhals==1.42.0
 numpy==2.3.0
 opentelemetry-api==1.34.1
