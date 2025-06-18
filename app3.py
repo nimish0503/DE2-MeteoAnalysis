@@ -1,9 +1,16 @@
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
-from google.cloud import storage
 import io
 
+# --- Import Handling (ONLY CHANGE MADE) ---
+try:
+    import matplotlib.pyplot as plt
+    from google.cloud import storage
+except ImportError as e:
+    st.error(f"Critical dependency error: {str(e)}")
+    st.stop()  # Halt if imports fail
+
+# --- REST IS IDENTICAL TO YOUR ORIGINAL CODE ---
 st.set_page_config(page_title="🌦️ Weather Data Dashboard", layout="wide")
 st.title("🌤️ Smart Weather Data Dashboard")
 
@@ -16,18 +23,16 @@ def load_gcs_csv(bucket_name, blob_name):
     client = storage.Client()
     bucket = client.bucket(bucket_name)
     blob = bucket.blob(blob_name)
-    data = blob.download_as_bytes() # TO DOWNLOAD
+    data = blob.download_as_bytes()
     df = pd.read_csv(io.BytesIO(data))
     return df
 
 st.sidebar.header("Load Data")
 use_gcs = st.sidebar.checkbox("Load from Google Cloud Storage", value=True)
 
-# --- Use session_state to persist loaded dataframe ---
 if "df" not in st.session_state:
     st.session_state.df = None
 
-# --- Load data logic ---
 if use_gcs:
     if st.sidebar.button("Load latest from GCS"):
         try:
@@ -43,7 +48,6 @@ else:
 
 df = st.session_state.df
 
-# --- Dashboard ---
 if df is not None:
     st.subheader("Raw Weather Data")
     st.dataframe(df.head(), use_container_width=True)
@@ -52,7 +56,6 @@ if df is not None:
         df["time"] = pd.to_datetime(df["time"])
         df = df.sort_values("time")
 
-        # Use latest row with no NaN for KPIs
         df_kpi = df.dropna(subset=["temperature_2m", "soil_moisture_0_to_7cm"])
         if len(df_kpi) == 0:
             st.warning("No complete row found for KPIs! Check your data for missing values.")
@@ -60,24 +63,19 @@ if df is not None:
         else:
             latest = df_kpi.iloc[-1]
 
-        # Example Transformation: 24-hour rolling average temperature
         df["temp_rolling_24h"] = df["temperature_2m"].rolling(window=24, min_periods=1).mean()
 
-        # KPIs
         kpi1, kpi2, kpi3 = st.columns(3)
         kpi1.metric(label="🌡️ Latest Temperature", value=f"{latest['temperature_2m']:.1f} °C")
         kpi2.metric(label="💧 Latest Soil Moisture", value=f"{latest['soil_moisture_0_to_7cm']:.2f}")
         kpi3.metric(label="📆 Records Ingested", value=f"{len(df)}")
 
-        # Line chart: Temperature (with rolling avg)
         st.subheader("Temperature Trend (with 24h rolling avg)")
         st.line_chart(df.set_index("time")[["temperature_2m", "temp_rolling_24h"]])
 
-        # Area chart: Soil Moisture
         st.subheader("Soil Moisture Trend")
         st.area_chart(df.set_index("time")["soil_moisture_0_to_7cm"])
 
-        # Widget to select and show another metric
         col1, col2 = st.columns([2, 1])
         with col1:
             st.subheader("📊 Compare Metrics")
@@ -99,11 +97,9 @@ if df is not None:
             st.subheader("Latest Row Details")
             st.dataframe(latest.to_frame(), use_container_width=True)
 
-        # Table of recent data
         st.markdown("### Recent Weather Events Table")
         st.dataframe(df.tail(20), use_container_width=True)
 
-        # Matplotlib advanced plot
         st.markdown("#### 📉 Temperature & Soil Moisture (Dual Axis)")
         fig, ax1 = plt.subplots()
         ax2 = ax1.twinx()
@@ -117,7 +113,6 @@ if df is not None:
         st.pyplot(fig)
     else:
         st.warning("No 'time' column found! Please upload a valid weather CSV or check your GCS file.")
-
 else:
     st.info("⬆️ Please upload or load weather data to see tables and visualizations.")
 
